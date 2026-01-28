@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2, Shuffle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
@@ -29,6 +29,7 @@ const STORAGE_KEYS = {
   HISTORY: 'bilimini_history',
   LOOP_MODE: 'bilimini_loop_mode',
   VOLUME: 'bilimini_volume',
+  SHUFFLE: 'bilimini_shuffle',
 };
 
 function App() {
@@ -52,6 +53,10 @@ function App() {
   const [loopMode, setLoopMode] = useState<LoopMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.LOOP_MODE) as LoopMode;
     return saved || 'off';
+  });
+  const [isShuffleOn, setIsShuffleOn] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SHUFFLE);
+    return saved === 'true';
   });
   const [inputBv, setInputBv] = useState('');
   const [searchResults, setSearchResults] = useState<BiliSearchResult[]>([]);
@@ -77,6 +82,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LOOP_MODE, loopMode);
   }, [loopMode]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SHUFFLE, isShuffleOn.toString());
+  }, [isShuffleOn]);
 
   // Auto-clear error messages
   useEffect(() => {
@@ -367,13 +376,33 @@ function App() {
 
   const playNext = () => {
     if (playlist.length === 0) return;
-    const nextIndex = (currentSongIndex + 1) % playlist.length;
+    
+    let nextIndex: number;
+    if (isShuffleOn) {
+      // Random index, but not the current one
+      do {
+        nextIndex = Math.floor(Math.random() * playlist.length);
+      } while (nextIndex === currentSongIndex && playlist.length > 1);
+    } else {
+      nextIndex = (currentSongIndex + 1) % playlist.length;
+    }
+    
     playSong(playlist[nextIndex], nextIndex);
   };
 
   const playPrev = () => {
     if (playlist.length === 0) return;
-    const prevIndex = (currentSongIndex - 1 + playlist.length) % playlist.length;
+    
+    let prevIndex: number;
+    if (isShuffleOn) {
+      // Random index for shuffle mode
+      do {
+        prevIndex = Math.floor(Math.random() * playlist.length);
+      } while (prevIndex === currentSongIndex && playlist.length > 1);
+    } else {
+      prevIndex = (currentSongIndex - 1 + playlist.length) % playlist.length;
+    }
+    
     playSong(playlist[prevIndex], prevIndex);
   };
 
@@ -679,6 +708,13 @@ function App() {
           </div>
 
           <div className="flex items-center justify-end gap-3 w-1/3">
+            <button 
+              onClick={() => setIsShuffleOn(!isShuffleOn)}
+              className={cn("transition-colors hover:text-white", isShuffleOn ? "text-pink-500" : "text-zinc-400")}
+              title={isShuffleOn ? "Shuffle: On" : "Shuffle: Off"}
+            >
+              <Shuffle size={16} />
+            </button>
             <button 
               onClick={exportPlaylist}
               className="text-zinc-400 hover:text-white transition-colors"
