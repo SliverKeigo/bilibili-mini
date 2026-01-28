@@ -12,6 +12,22 @@ export interface BiliVideoInfo {
   duration: number;
   cid: number;
   bvid: string;
+  pages?: BiliPage[]; // Multi-part video pages
+}
+
+export interface BiliPage {
+  cid: number;
+  page: number;
+  part: string; // Title of this part
+  duration: number;
+}
+
+export interface BiliSearchResult {
+  bvid: string;
+  title: string;
+  author: string;
+  duration: number; // in seconds
+  pic: string;
 }
 
 export interface BiliAudioStream {
@@ -28,7 +44,18 @@ export const formatDuration = (seconds: number) => {
   return `${min}:${sec.toString().padStart(2, '0')}`;
 };
 
-// 1. Get video metadata (including CID)
+// Helper: Parse duration string like "1:23:45" or "4:30" to seconds
+const parseDuration = (str: string): number => {
+  const parts = str.split(':').map(Number);
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  } else if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  }
+  return 0;
+};
+
+// 1. Get video metadata (including CID and pages)
 export async function getVideoInfo(bvid: string): Promise<BiliVideoInfo> {
   const url = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
   console.log('Fetching video info:', url);
@@ -59,7 +86,6 @@ export async function getAudioStreamUrl(bvid: string, cid: number): Promise<stri
     headers: {
       'User-Agent': USER_AGENT,
       'Referer': 'https://www.bilibili.com', // Crucial!
-      'Cookie': 'SESSDATA=your_sessdata_here_if_needed', // Optional: for 1080p+, usually not needed for basic audio
     }
   });
 
@@ -84,8 +110,6 @@ export async function getAudioStreamUrl(bvid: string, cid: number): Promise<stri
 }
 
 // 3. Proxy audio stream (to bypass Referer check on playback)
-// Since html5 audio tag cannot set headers, we fetch the blob via Tauri and create a local object URL.
-// Note: For long streams, this loads entire file into memory. For production, a Rust-side stream proxy is better.
 export async function getPlayableAudioUrl(streamUrl: string): Promise<string> {
   console.log('Proxying stream:', streamUrl);
   
@@ -103,4 +127,32 @@ export async function getPlayableAudioUrl(streamUrl: string): Promise<string> {
 
   const blob = await response.blob();
   return URL.createObjectURL(blob);
+}
+
+// 4. Search videos on Bilibili
+export async function searchVideos(keyword: string, page = 1): Promise<BiliSearchResult[]> {
+  const url = `https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=${encodeURIComponent(keyword)}&page=${page}`;
+  console.log('Searching:', url);
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'User-Agent': USER_AGENT,
+    }
+  });
+
+  const data = await response.json();
+  if (data.code !== 0) {
+    throw new Error(data.message || 'Search failed');
+  }
+
+  const results = data.data.result || [];
+  
+  return results.slice(0, 15).map((item: any) => ({
+    bvid: item.bvid,
+    title: item.title.replace(/<[^>]*>/g, ''), // Remove HTML tags
+    author: item.author,
+    duration: parseDuration(item.duration),
+    pic: 'https:' + item.pic,
+  }));
 }

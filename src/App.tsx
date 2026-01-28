@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, Shuffle, RefreshCw, X } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, BiliVideoInfo } from './bili-api';
+import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -10,21 +10,22 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 // Types
 interface Song {
-  id: string; // bvid + cid
+  id: string;
   bvid: string;
   cid: number;
   title: string;
   author: string;
-  duration: number; // seconds
+  duration: number;
   cover: string;
-  audioUrl?: string; // Blob URL
+  audioUrl?: string;
 }
 
 type LoopMode = 'off' | 'all' | 'one';
+type ViewMode = 'playlist' | 'search' | 'history';
 
-// Persistent storage keys
 const STORAGE_KEYS = {
   PLAYLIST: 'bilimini_playlist',
+  HISTORY: 'bilimini_history',
   LOOP_MODE: 'bilimini_loop_mode',
   VOLUME: 'bilimini_volume',
 };
@@ -35,10 +36,14 @@ function App() {
     const saved = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
     return saved ? JSON.parse(saved) : [];
   });
+  const [history, setHistory] = useState<Song[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(-1);
   const [progress, setProgress] = useState(0); 
   const [currentTime, setCurrentTime] = useState(0);
-  const [showPlaylist, setShowPlaylist] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('playlist');
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.VOLUME);
     return saved ? parseFloat(saved) : 0.8;
@@ -48,28 +53,31 @@ function App() {
     return saved || 'off';
   });
   const [inputBv, setInputBv] = useState('');
+  const [searchResults, setSearchResults] = useState<BiliSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
 
-  // Save playlist to localStorage
+  // Save to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
   }, [playlist]);
 
-  // Save volume to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
+  }, [history]);
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.VOLUME, volume.toString());
   }, [volume]);
 
-  // Save loop mode to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LOOP_MODE, loopMode);
   }, [loopMode]);
 
-  // Initialize audio element
+  // Initialize audio
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
@@ -106,7 +114,7 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return; // Ignore if typing in input
+      if (e.target instanceof HTMLInputElement) return;
       
       switch(e.code) {
         case 'Space':
@@ -130,9 +138,15 @@ function App() {
 
   const currentSong = currentSongIndex >= 0 ? playlist[currentSongIndex] : null;
 
+  const addToHistory = (song: Song) => {
+    setHistory(prev => {
+      const filtered = prev.filter(s => s.id !== song.id);
+      return [song, ...filtered].slice(0, 50); // Keep last 50
+    });
+  };
+
   const handleSongEnd = () => {
     if (loopMode === 'one') {
-      // Replay current song
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
         audioRef.current.play();
@@ -140,7 +154,6 @@ function App() {
     } else if (loopMode === 'all') {
       playNext();
     } else {
-      // Check if there's a next song
       if (currentSongIndex < playlist.length - 1) {
         playNext();
       } else {
@@ -149,45 +162,75 @@ function App() {
     }
   };
 
-  const handleSearch = async () => {
-    if (!inputBv) return;
+  const handleInput = async () => {
+    if (!inputBv.trim()) return;
+    
+    const trimmed = inputBv.trim();
+    
+    // Check if it's a BV ID
+    const bvMatch = trimmed.match(/(BV\w+)/);
+    if (bvMatch) {
+      await handleAddByBV(bvMatch[1]);
+    } else {
+      // Trigger search
+      await handleSearch(trimmed);
+    }
+  };
+
+  const handleAddByBV = async (bvid: string) => {
     setIsLoading(true);
     setErrorMsg('');
     
-    // Extract BV id if URL provided
-    let bvid = inputBv.trim();
-    const match = inputBv.match(/(BV\w+)/);
-    if (match) bvid = match[1];
-
     try {
       const info = await getVideoInfo(bvid);
       
-      // Check if song already exists
-      const exists = playlist.some(s => s.bvid === info.bvid);
-      if (exists) {
-        setErrorMsg('Already in playlist!');
-        setIsLoading(false);
-        return;
-      }
+      // Check if it's a multi-part video
+      if (info.pages && info.pages.length > 1) {
+        // Add all parts
+        const newSongs: Song[] = info.pages.map(page => ({
+          id: `${info.bvid}-${page.cid}`,
+          bvid: info.bvid,
+          cid: page.cid,
+          title: `${info.title} - ${page.part}`,
+          author: info.owner.name,
+          duration: page.duration,
+          cover: info.pic,
+        }));
+        
+        setPlaylist(prev => [...prev, ...newSongs]);
+        
+        if (currentSongIndex === -1) {
+          playSong(newSongs[0], playlist.length);
+        }
+        
+        setInputBv('');
+      } else {
+        // Single video
+        const exists = playlist.some(s => s.bvid === info.bvid);
+        if (exists) {
+          setErrorMsg('Already in playlist!');
+          setIsLoading(false);
+          return;
+        }
 
-      const newSong: Song = {
-        id: `${info.bvid}-${info.cid}`,
-        bvid: info.bvid,
-        cid: info.cid,
-        title: info.title,
-        author: info.owner.name,
-        duration: info.duration,
-        cover: info.pic,
-      };
+        const newSong: Song = {
+          id: `${info.bvid}-${info.cid}`,
+          bvid: info.bvid,
+          cid: info.cid,
+          title: info.title,
+          author: info.owner.name,
+          duration: info.duration,
+          cover: info.pic,
+        };
 
-      setPlaylist(prev => [...prev, newSong]);
-      
-      // If nothing playing, play this one
-      if (currentSongIndex === -1) {
-        playSong(newSong, playlist.length); // length is index of new item
+        setPlaylist(prev => [...prev, newSong]);
+        
+        if (currentSongIndex === -1) {
+          playSong(newSong, playlist.length);
+        }
+        
+        setInputBv('');
       }
-      
-      setInputBv(''); // Clear input
     } catch (e: any) {
       console.error(e);
       setErrorMsg(e.message || 'Error fetching video');
@@ -196,18 +239,67 @@ function App() {
     }
   };
 
+  const handleSearch = async (keyword: string) => {
+    setIsLoading(true);
+    setErrorMsg('');
+    
+    try {
+      const results = await searchVideos(keyword);
+      setSearchResults(results);
+      setViewMode('search');
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(e.message || 'Search failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const addFromSearch = async (result: BiliSearchResult) => {
+    const exists = playlist.some(s => s.bvid === result.bvid);
+    if (exists) {
+      setErrorMsg('Already in playlist!');
+      setTimeout(() => setErrorMsg(''), 2000);
+      return;
+    }
+
+    const newSong: Song = {
+      id: `${result.bvid}-temp`,
+      bvid: result.bvid,
+      cid: 0, // Will be fetched when playing
+      title: result.title,
+      author: result.author,
+      duration: result.duration,
+      cover: result.pic,
+    };
+
+    setPlaylist(prev => [...prev, newSong]);
+  };
+
   const playSong = async (song: Song, index: number) => {
     try {
       setIsLoading(true);
       setErrorMsg('');
       
-      // If no audio url yet (or expired), fetch it
+      // If CID is 0, fetch it
+      let cid = song.cid;
+      if (cid === 0) {
+        const info = await getVideoInfo(song.bvid);
+        cid = info.cid;
+        
+        // Update playlist with correct CID
+        setPlaylist(prev => {
+          const next = [...prev];
+          next[index] = { ...song, cid, id: `${song.bvid}-${cid}` };
+          return next;
+        });
+      }
+      
       let url = song.audioUrl;
       if (!url) {
-        const streamUrl = await getAudioStreamUrl(song.bvid, song.cid);
+        const streamUrl = await getAudioStreamUrl(song.bvid, cid);
         url = await getPlayableAudioUrl(streamUrl);
         
-        // Cache it in playlist
         setPlaylist(prev => {
           const next = [...prev];
           next[index] = { ...song, audioUrl: url };
@@ -220,6 +312,7 @@ function App() {
         await audioRef.current.play();
         setIsPlaying(true);
         setCurrentSongIndex(index);
+        addToHistory(playlist[index]);
       }
     } catch (e: any) {
       console.error('Play failed', e);
@@ -259,9 +352,7 @@ function App() {
     setPlaylist(prev => {
       const next = prev.filter((_, i) => i !== index);
       
-      // Adjust current index if needed
       if (index === currentSongIndex) {
-        // Stop playing if removing current song
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current.src = '';
@@ -301,8 +392,13 @@ function App() {
 
   return (
     <div className="h-screen w-full bg-zinc-900/95 text-white flex flex-col select-none overflow-hidden rounded-xl border border-white/10 shadow-2xl backdrop-blur-md font-sans">
-      {/* Header / Search */}
+      {/* Header */}
       <div className="h-12 border-b border-white/5 flex items-center px-4 gap-3 bg-zinc-800/50" data-tauri-drag-region>
+        {viewMode === 'search' && (
+          <button onClick={() => setViewMode('playlist')} className="text-zinc-400 hover:text-white transition-colors">
+            <ArrowLeft size={16} />
+          </button>
+        )}
         <div className="text-pink-500 font-bold tracking-tight flex items-center gap-1">
           <span className="text-lg">📺</span>
         </div>
@@ -314,28 +410,27 @@ function App() {
             type="text"
             value={inputBv}
             onChange={(e) => setInputBv(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="BV..."
+            onKeyDown={(e) => e.key === 'Enter' && handleInput()}
+            placeholder={viewMode === 'search' ? 'Search...' : 'BV / Search...'}
             className="w-full bg-zinc-900/50 border border-transparent focus:border-pink-500/50 rounded-full py-1 pl-8 pr-3 text-xs outline-none transition-all placeholder:text-zinc-600 font-mono"
             disabled={isLoading}
           />
         </div>
       </div>
 
-      {/* Error Toast */}
       {errorMsg && (
         <div className="bg-red-500/10 text-red-400 text-xs px-4 py-1 text-center border-b border-red-500/10">
           {errorMsg}
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide relative group">
-        {showPlaylist ? (
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide">
+        {viewMode === 'playlist' && (
           <div className="flex flex-col">
             {playlist.length === 0 && (
               <div className="text-zinc-600 text-xs text-center py-10 italic">
-                Playlist empty.<br/>Paste a Bilibili ID above.
+                Playlist empty.<br/>Paste BV or search above.
               </div>
             )}
             {playlist.map((song, idx) => (
@@ -366,28 +461,72 @@ function App() {
               </div>
             ))}
           </div>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-            {currentSong ? (
-               <>
-                <div className="w-32 h-32 rounded-lg bg-zinc-800 shadow-lg shadow-black/20 overflow-hidden relative group/cover">
-                   <img src={currentSong.cover} alt="cover" className="w-full h-full object-cover opacity-80 group-hover/cover:opacity-100 transition-opacity" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white line-clamp-2 px-4">{currentSong.title}</h2>
-                  <p className="text-xs text-zinc-500 mt-1">{currentSong.author}</p>
-                </div>
-               </>
-            ) : (
-                <div className="text-zinc-600 text-xs">No song playing</div>
+        )}
+
+        {viewMode === 'search' && (
+          <div className="flex flex-col">
+            {searchResults.length === 0 && !isLoading && (
+              <div className="text-zinc-600 text-xs text-center py-10 italic">
+                No results.
+              </div>
             )}
+            {searchResults.map((result) => (
+              <div 
+                key={result.bvid}
+                className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-sm border-b border-white/5 group/item"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate text-xs text-zinc-200">
+                    {result.title}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 truncate mt-0.5">{result.author}</div>
+                </div>
+                <div className="text-[10px] text-zinc-600 font-mono">{formatDuration(result.duration)}</div>
+                <button
+                  onClick={() => addFromSearch(result)}
+                  className="text-zinc-500 hover:text-pink-400 transition-colors"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {viewMode === 'history' && (
+          <div className="flex flex-col">
+            {history.length === 0 && (
+              <div className="text-zinc-600 text-xs text-center py-10 italic">
+                No history yet.
+              </div>
+            )}
+            {history.map((song, idx) => (
+              <div 
+                key={song.id + idx}
+                onClick={() => {
+                  const playlistIdx = playlist.findIndex(s => s.id === song.id);
+                  if (playlistIdx >= 0) {
+                    playSong(playlist[playlistIdx], playlistIdx);
+                    setViewMode('playlist');
+                  }
+                }}
+                className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer transition-colors text-sm border-b border-white/5"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate text-xs text-zinc-200">
+                    {song.title}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 truncate mt-0.5">{song.author}</div>
+                </div>
+                <div className="text-[10px] text-zinc-600 font-mono">{formatDuration(song.duration)}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
       {/* Controls */}
       <div className="h-24 bg-zinc-900 border-t border-white/5 flex flex-col">
-        {/* Progress Bar */}
         <div 
           ref={progressBarRef}
           className="w-full h-1 bg-zinc-800 cursor-pointer group"
@@ -402,7 +541,6 @@ function App() {
         </div>
 
         <div className="flex-1 flex items-center justify-between px-4">
-          {/* Left: Info */}
           <div className="flex items-center gap-3 w-1/3">
             <div className="flex flex-col min-w-0">
                <span className="text-[10px] text-zinc-400 font-mono">
@@ -411,7 +549,6 @@ function App() {
             </div>
           </div>
 
-          {/* Center: Play Controls */}
           <div className="flex items-center justify-center gap-4 w-1/3">
             <button onClick={playPrev} className="text-zinc-400 hover:text-white transition-colors" disabled={playlist.length === 0}>
               <SkipBack size={18} />
@@ -428,13 +565,19 @@ function App() {
             </button>
           </div>
 
-          {/* Right: Extra Controls */}
           <div className="flex items-center justify-end gap-3 w-1/3">
             <button 
-              onClick={() => setShowPlaylist(!showPlaylist)}
-              className={cn("transition-colors", showPlaylist ? "text-pink-500" : "text-zinc-400 hover:text-white")}
+              onClick={() => setViewMode(viewMode === 'playlist' ? 'playlist' : 'playlist')}
+              className={cn("transition-colors", viewMode === 'playlist' ? "text-pink-500" : "text-zinc-400 hover:text-white")}
             >
               <List size={16} />
+            </button>
+            <button 
+              onClick={() => setViewMode(viewMode === 'history' ? 'playlist' : 'history')}
+              className={cn("transition-colors", viewMode === 'history' ? "text-pink-500" : "text-zinc-400 hover:text-white")}
+              title="History"
+            >
+              <Clock size={16} />
             </button>
             <button 
               onClick={toggleLoopMode}
