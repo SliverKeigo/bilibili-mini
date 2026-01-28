@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
@@ -396,6 +396,45 @@ function App() {
     setLoopMode(modes[(currentIdx + 1) % modes.length]);
   };
 
+  const exportPlaylist = () => {
+    const data = JSON.stringify(playlist, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bilimini-playlist-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const importPlaylist = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text) as Song[];
+        
+        // Validate structure
+        if (!Array.isArray(imported) || !imported.every(s => s.bvid && s.title)) {
+          setErrorMsg('Invalid playlist file');
+          return;
+        }
+        
+        setPlaylist(prev => [...prev, ...imported]);
+      } catch (e) {
+        setErrorMsg('Failed to import playlist');
+      }
+    };
+    input.click();
+  };
+
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!audioRef.current || !currentSong) return;
     
@@ -589,6 +628,21 @@ function App() {
           </div>
 
           <div className="flex items-center justify-end gap-3 w-1/3">
+            <button 
+              onClick={exportPlaylist}
+              className="text-zinc-400 hover:text-white transition-colors"
+              title="Export Playlist"
+              disabled={playlist.length === 0}
+            >
+              <Download size={14} />
+            </button>
+            <button 
+              onClick={importPlaylist}
+              className="text-zinc-400 hover:text-white transition-colors"
+              title="Import Playlist"
+            >
+              <Upload size={14} />
+            </button>
             <button 
               onClick={() => setViewMode(viewMode === 'playlist' ? 'playlist' : 'playlist')}
               className={cn("transition-colors", viewMode === 'playlist' ? "text-pink-500" : "text-zinc-400 hover:text-white")}
