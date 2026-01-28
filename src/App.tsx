@@ -3,6 +3,7 @@ import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repe
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
+import { listen } from '@tauri-apps/api/event';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -134,6 +135,28 @@ function App() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isPlaying, currentSongIndex, playlist]);
+
+  // Global shortcuts listener
+  useEffect(() => {
+    const unlisten = listen<string>('global-shortcut', (event) => {
+      const action = event.payload;
+      switch(action) {
+        case 'play-pause':
+          togglePlay();
+          break;
+        case 'next':
+          playNext();
+          break;
+        case 'prev':
+          playPrev();
+          break;
+      }
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
   }, [isPlaying, currentSongIndex, playlist]);
 
   const currentSong = currentSongIndex >= 0 ? playlist[currentSongIndex] : null;
