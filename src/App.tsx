@@ -635,11 +635,31 @@ function App() {
 
         <div className="flex-1 flex items-center justify-between px-4">
           <div className="flex items-center gap-3 w-1/3">
-            <div className="flex flex-col min-w-0">
-               <span className="text-[10px] text-zinc-400 font-mono">
-                 {formatDuration(currentTime)} / {currentSong ? formatDuration(currentSong.duration) : "0:00"}
-               </span>
-            </div>
+            {currentSong && (
+              <>
+                <div className="w-12 h-12 rounded bg-zinc-800 overflow-hidden flex-shrink-0 shadow-md">
+                  <img 
+                    src={currentSong.cover} 
+                    alt="cover" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="text-[11px] font-medium text-white truncate">
+                    {currentSong.title}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 truncate">
+                    {currentSong.author}
+                  </div>
+                  <div className="text-[9px] text-zinc-600 font-mono mt-0.5">
+                    {formatDuration(currentTime)} / {formatDuration(currentSong.duration)}
+                  </div>
+                </div>
+              </>
+            )}
+            {!currentSong && (
+              <span className="text-[10px] text-zinc-600 italic">No song playing</span>
+            )}
           </div>
 
           <div className="flex items-center justify-center gap-4 w-1/3">
