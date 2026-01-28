@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
@@ -77,6 +77,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LOOP_MODE, loopMode);
   }, [loopMode]);
+
+  // Auto-clear error messages
+  useEffect(() => {
+    if (errorMsg) {
+      const timer = setTimeout(() => setErrorMsg(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMsg]);
 
   // Initialize audio
   useEffect(() => {
@@ -435,6 +443,20 @@ function App() {
     input.click();
   };
 
+  const clearPlaylist = () => {
+    if (playlist.length === 0) return;
+    
+    if (confirm(`Clear all ${playlist.length} songs from playlist?`)) {
+      setPlaylist([]);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      setIsPlaying(false);
+      setCurrentSongIndex(-1);
+    }
+  };
+
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!audioRef.current || !currentSong) return;
     
@@ -478,6 +500,15 @@ function App() {
             disabled={isLoading}
           />
         </div>
+        {viewMode === 'playlist' && playlist.length > 0 && (
+          <button 
+            onClick={clearPlaylist}
+            className="text-zinc-500 hover:text-red-400 transition-colors"
+            title="Clear playlist"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
 
       {errorMsg && (
