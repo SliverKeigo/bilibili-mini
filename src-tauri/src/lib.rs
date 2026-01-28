@@ -3,7 +3,7 @@ use tauri::{
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
-use tauri_plugin_positioner::{Positioner, WindowExt};
+use tauri_plugin_positioner::{Position, WindowExt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,7 +32,7 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.as_ref().window().move_window(tauri_plugin_positioner::Position::TrayCenter);
+                            let _ = window.as_ref().window().move_window(Position::TrayCenter);
                             
                             if window.is_visible().unwrap_or(false) {
                                 let _ = window.hide();
