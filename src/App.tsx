@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Settings, Repeat, RefreshCw } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, Shuffle, RefreshCw, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, BiliVideoInfo } from './bili-api';
@@ -8,7 +8,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
-// Mock data for UI demo
+// Types
 interface Song {
   id: string; // bvid + cid
   bvid: string;
@@ -20,18 +20,54 @@ interface Song {
   audioUrl?: string; // Blob URL
 }
 
+type LoopMode = 'off' | 'all' | 'one';
+
+// Persistent storage keys
+const STORAGE_KEYS = {
+  PLAYLIST: 'bilimini_playlist',
+  LOOP_MODE: 'bilimini_loop_mode',
+  VOLUME: 'bilimini_volume',
+};
+
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playlist, setPlaylist] = useState<Song[]>([]);
+  const [playlist, setPlaylist] = useState<Song[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(-1);
   const [progress, setProgress] = useState(0); 
+  const [currentTime, setCurrentTime] = useState(0);
   const [showPlaylist, setShowPlaylist] = useState(true);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.VOLUME);
+    return saved ? parseFloat(saved) : 0.8;
+  });
+  const [loopMode, setLoopMode] = useState<LoopMode>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LOOP_MODE) as LoopMode;
+    return saved || 'off';
+  });
   const [inputBv, setInputBv] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+
+  // Save playlist to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
+  }, [playlist]);
+
+  // Save volume to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.VOLUME, volume.toString());
+  }, [volume]);
+
+  // Save loop mode to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.LOOP_MODE, loopMode);
+  }, [loopMode]);
 
   // Initialize audio element
   useEffect(() => {
@@ -41,14 +77,24 @@ function App() {
       
       audioRef.current.ontimeupdate = () => {
         if (audioRef.current && audioRef.current.duration) {
-          setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+          const current = audioRef.current.currentTime;
+          const duration = audioRef.current.duration;
+          setCurrentTime(current);
+          setProgress((current / duration) * 100);
         }
       };
       
       audioRef.current.onended = () => {
-        playNext();
+        handleSongEnd();
       };
     }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -57,7 +103,51 @@ function App() {
     }
   }, [volume]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return; // Ignore if typing in input
+      
+      switch(e.code) {
+        case 'Space':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          playPrev();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          playNext();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isPlaying, currentSongIndex, playlist]);
+
   const currentSong = currentSongIndex >= 0 ? playlist[currentSongIndex] : null;
+
+  const handleSongEnd = () => {
+    if (loopMode === 'one') {
+      // Replay current song
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
+    } else if (loopMode === 'all') {
+      playNext();
+    } else {
+      // Check if there's a next song
+      if (currentSongIndex < playlist.length - 1) {
+        playNext();
+      } else {
+        setIsPlaying(false);
+      }
+    }
+  };
 
   const handleSearch = async () => {
     if (!inputBv) return;
@@ -65,7 +155,7 @@ function App() {
     setErrorMsg('');
     
     // Extract BV id if URL provided
-    let bvid = inputBv;
+    let bvid = inputBv.trim();
     const match = inputBv.match(/(BV\w+)/);
     if (match) bvid = match[1];
 
@@ -109,6 +199,7 @@ function App() {
   const playSong = async (song: Song, index: number) => {
     try {
       setIsLoading(true);
+      setErrorMsg('');
       
       // If no audio url yet (or expired), fetch it
       let url = song.audioUrl;
@@ -116,7 +207,7 @@ function App() {
         const streamUrl = await getAudioStreamUrl(song.bvid, song.cid);
         url = await getPlayableAudioUrl(streamUrl);
         
-        // Cache it in playlist (simple version)
+        // Cache it in playlist
         setPlaylist(prev => {
           const next = [...prev];
           next[index] = { ...song, audioUrl: url };
@@ -133,6 +224,7 @@ function App() {
     } catch (e: any) {
       console.error('Play failed', e);
       setErrorMsg('Failed to play: ' + e.message);
+      setIsPlaying(false);
     } finally {
       setIsLoading(false);
     }
@@ -161,6 +253,52 @@ function App() {
     playSong(playlist[prevIndex], prevIndex);
   };
 
+  const removeSong = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    setPlaylist(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      
+      // Adjust current index if needed
+      if (index === currentSongIndex) {
+        // Stop playing if removing current song
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.src = '';
+        }
+        setIsPlaying(false);
+        setCurrentSongIndex(-1);
+      } else if (index < currentSongIndex) {
+        setCurrentSongIndex(prev => prev - 1);
+      }
+      
+      return next;
+    });
+  };
+
+  const toggleLoopMode = () => {
+    const modes: LoopMode[] = ['off', 'all', 'one'];
+    const currentIdx = modes.indexOf(loopMode);
+    setLoopMode(modes[(currentIdx + 1) % modes.length]);
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !currentSong) return;
+    
+    const bar = progressBarRef.current;
+    if (!bar) return;
+    
+    const rect = bar.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    const newTime = percentage * audioRef.current.duration;
+    
+    audioRef.current.currentTime = newTime;
+  };
+
+  const LoopIcon = loopMode === 'one' ? Repeat1 : Repeat;
+  const loopColor = loopMode === 'off' ? 'text-zinc-400' : 'text-pink-500';
+
   return (
     <div className="h-screen w-full bg-zinc-900/95 text-white flex flex-col select-none overflow-hidden rounded-xl border border-white/10 shadow-2xl backdrop-blur-md font-sans">
       {/* Header / Search */}
@@ -182,9 +320,6 @@ function App() {
             disabled={isLoading}
           />
         </div>
-        <button className="text-zinc-400 hover:text-white transition-colors">
-          <Settings size={16} />
-        </button>
       </div>
 
       {/* Error Toast */}
@@ -208,7 +343,7 @@ function App() {
                 key={song.id}
                 onClick={() => playSong(song, idx)}
                 className={cn(
-                  "px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer transition-colors text-sm border-b border-white/5",
+                  "px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer transition-colors text-sm border-b border-white/5 group/item",
                   idx === currentSongIndex && "bg-pink-500/10"
                 )}
               >
@@ -222,6 +357,12 @@ function App() {
                   <div className="text-[10px] text-zinc-500 truncate mt-0.5">{song.author}</div>
                 </div>
                 <div className="text-[10px] text-zinc-600 font-mono">{formatDuration(song.duration)}</div>
+                <button
+                  onClick={(e) => removeSong(idx, e)}
+                  className="opacity-0 group-hover/item:opacity-100 text-zinc-500 hover:text-red-400 transition-all"
+                >
+                  <X size={14} />
+                </button>
               </div>
             ))}
           </div>
@@ -233,7 +374,7 @@ function App() {
                    <img src={currentSong.cover} alt="cover" className="w-full h-full object-cover opacity-80 group-hover/cover:opacity-100 transition-opacity" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white line-clamp-1 px-4">{currentSong.title}</h2>
+                  <h2 className="text-sm font-bold text-white line-clamp-2 px-4">{currentSong.title}</h2>
                   <p className="text-xs text-zinc-500 mt-1">{currentSong.author}</p>
                 </div>
                </>
@@ -248,13 +389,12 @@ function App() {
       <div className="h-24 bg-zinc-900 border-t border-white/5 flex flex-col">
         {/* Progress Bar */}
         <div 
+          ref={progressBarRef}
           className="w-full h-1 bg-zinc-800 cursor-pointer group"
-          onClick={(e) => {
-             // Simple seek logic (visual only for now without ref access to width)
-          }}
+          onClick={handleProgressClick}
         >
           <div 
-            className="h-full bg-pink-500 relative group-hover:bg-pink-400 transition-colors" 
+            className="h-full bg-pink-500 relative group-hover:bg-pink-400 transition-colors pointer-events-none" 
             style={{ width: `${progress}%` }}
           >
             <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-sm" />
@@ -266,23 +406,24 @@ function App() {
           <div className="flex items-center gap-3 w-1/3">
             <div className="flex flex-col min-w-0">
                <span className="text-[10px] text-zinc-400 font-mono">
-                 {currentSong && audioRef.current ? formatDuration(audioRef.current.currentTime) : "0:00"} / {currentSong ? formatDuration(currentSong.duration) : "0:00"}
+                 {formatDuration(currentTime)} / {currentSong ? formatDuration(currentSong.duration) : "0:00"}
                </span>
             </div>
           </div>
 
           {/* Center: Play Controls */}
           <div className="flex items-center justify-center gap-4 w-1/3">
-            <button onClick={playPrev} className="text-zinc-400 hover:text-white transition-colors">
+            <button onClick={playPrev} className="text-zinc-400 hover:text-white transition-colors" disabled={playlist.length === 0}>
               <SkipBack size={18} />
             </button>
             <button 
               onClick={togglePlay}
-              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/10"
+              disabled={!currentSong}
+              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
             </button>
-            <button onClick={playNext} className="text-zinc-400 hover:text-white transition-colors">
+            <button onClick={playNext} className="text-zinc-400 hover:text-white transition-colors" disabled={playlist.length === 0}>
               <SkipForward size={18} />
             </button>
           </div>
@@ -294,6 +435,13 @@ function App() {
               className={cn("transition-colors", showPlaylist ? "text-pink-500" : "text-zinc-400 hover:text-white")}
             >
               <List size={16} />
+            </button>
+            <button 
+              onClick={toggleLoopMode}
+              className={cn("transition-colors hover:text-white", loopColor)}
+              title={loopMode === 'off' ? 'Loop: Off' : loopMode === 'all' ? 'Loop: All' : 'Loop: One'}
+            >
+              <LoopIcon size={16} />
             </button>
             <div className="flex items-center gap-1.5 group w-16">
               <Volume2 size={14} className="text-zinc-400 flex-shrink-0" />
