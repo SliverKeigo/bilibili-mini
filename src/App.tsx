@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2, Shuffle } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2, Shuffle, Moon, Sun } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
@@ -30,6 +30,7 @@ const STORAGE_KEYS = {
   LOOP_MODE: 'bilimini_loop_mode',
   VOLUME: 'bilimini_volume',
   SHUFFLE: 'bilimini_shuffle',
+  THEME: 'bilimini_theme',
 };
 
 function App() {
@@ -57,6 +58,10 @@ function App() {
   const [isShuffleOn, setIsShuffleOn] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SHUFFLE);
     return saved === 'true';
+  });
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.THEME);
+    return saved === 'dark';
   });
   const [inputBv, setInputBv] = useState('');
   const [searchResults, setSearchResults] = useState<BiliSearchResult[]>([]);
@@ -86,6 +91,15 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SHUFFLE, isShuffleOn.toString());
   }, [isShuffleOn]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.THEME, isDarkMode ? 'dark' : 'light');
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   // Auto-clear error messages
   useEffect(() => {
@@ -504,9 +518,19 @@ function App() {
   const loopColor = loopMode === 'off' ? 'text-zinc-400' : 'text-pink-500';
 
   return (
-    <div className="h-screen w-full bg-zinc-900/95 text-white flex flex-col select-none overflow-hidden rounded-xl border border-white/10 shadow-2xl backdrop-blur-md font-sans">
+    <div className={cn(
+      "h-screen w-full text-white flex flex-col select-none overflow-hidden rounded-xl border shadow-2xl backdrop-blur-md font-sans transition-colors",
+      isDarkMode 
+        ? "bg-zinc-900/95 border-white/10" 
+        : "bg-white text-zinc-900 border-zinc-200"
+    )}>
       {/* Header */}
-      <div className="h-12 border-b border-white/5 flex items-center px-4 gap-3 bg-zinc-800/50" data-tauri-drag-region>
+      <div className={cn(
+        "h-12 border-b flex items-center px-4 gap-3",
+        isDarkMode 
+          ? "bg-zinc-800/50 border-white/5" 
+          : "bg-zinc-100 border-zinc-200"
+      )} data-tauri-drag-region>
         {viewMode === 'search' && (
           <button onClick={() => setViewMode('playlist')} className="text-zinc-400 hover:text-white transition-colors">
             <ArrowLeft size={16} />
@@ -525,10 +549,27 @@ function App() {
             onChange={(e) => setInputBv(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleInput()}
             placeholder={viewMode === 'search' ? 'Search...' : 'BV / Search...'}
-            className="w-full bg-zinc-900/50 border border-transparent focus:border-pink-500/50 rounded-full py-1 pl-8 pr-3 text-xs outline-none transition-all placeholder:text-zinc-600 font-mono"
+            className={cn(
+              "w-full border border-transparent focus:border-pink-500/50 rounded-full py-1 pl-8 pr-3 text-xs outline-none transition-all font-mono",
+              isDarkMode
+                ? "bg-zinc-900/50 placeholder:text-zinc-600"
+                : "bg-zinc-50 placeholder:text-zinc-400 text-zinc-900"
+            )}
             disabled={isLoading}
           />
         </div>
+        <button 
+          onClick={() => setIsDarkMode(!isDarkMode)}
+          className={cn(
+            "transition-colors",
+            isDarkMode
+              ? "text-zinc-500 hover:text-yellow-400"
+              : "text-zinc-400 hover:text-zinc-700"
+          )}
+          title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDarkMode ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
         {viewMode === 'playlist' && playlist.length > 0 && (
           <button 
             onClick={clearPlaylist}
@@ -551,7 +592,10 @@ function App() {
         {viewMode === 'playlist' && (
           <div className="flex flex-col">
             {playlist.length === 0 && (
-              <div className="text-zinc-600 text-xs text-center py-10 italic">
+              <div className={cn(
+                "text-xs text-center py-10 italic",
+                isDarkMode ? "text-zinc-600" : "text-zinc-400"
+              )}>
                 Playlist empty.<br/>Paste BV or search above.
               </div>
             )}
@@ -560,20 +604,34 @@ function App() {
                 key={song.id}
                 onClick={() => playSong(song, idx)}
                 className={cn(
-                  "px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer transition-colors text-sm border-b border-white/5 group/item",
-                  idx === currentSongIndex && "bg-pink-500/10"
+                  "px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors text-sm border-b group/item",
+                  idx === currentSongIndex && "bg-pink-500/10",
+                  isDarkMode 
+                    ? "hover:bg-white/5 border-white/5" 
+                    : "hover:bg-zinc-100 border-zinc-200"
                 )}
               >
                 <div className={cn("text-xs w-4 text-center", idx === currentSongIndex ? "text-pink-500" : "text-zinc-500")}>
                   {idx === currentSongIndex ? (isPlaying ? '♫' : '⏸') : idx + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className={cn("font-medium truncate text-xs", idx === currentSongIndex ? "text-pink-400" : "text-zinc-200")}>
+                  <div className={cn(
+                  "font-medium truncate text-xs",
+                  idx === currentSongIndex 
+                    ? "text-pink-400" 
+                    : isDarkMode ? "text-zinc-200" : "text-zinc-700"
+                )}>
                     {song.title}
                   </div>
-                  <div className="text-[10px] text-zinc-500 truncate mt-0.5">{song.author}</div>
+                  <div className={cn(
+                    "text-[10px] truncate mt-0.5",
+                    isDarkMode ? "text-zinc-500" : "text-zinc-400"
+                  )}>{song.author}</div>
                 </div>
-                <div className="text-[10px] text-zinc-600 font-mono">{formatDuration(song.duration)}</div>
+                <div className={cn(
+                  "text-[10px] font-mono",
+                  isDarkMode ? "text-zinc-600" : "text-zinc-500"
+                )}>{formatDuration(song.duration)}</div>
                 <button
                   onClick={(e) => removeSong(idx, e)}
                   className="opacity-0 group-hover/item:opacity-100 text-zinc-500 hover:text-red-400 transition-all"
@@ -588,22 +646,39 @@ function App() {
         {viewMode === 'search' && (
           <div className="flex flex-col">
             {searchResults.length === 0 && !isLoading && (
-              <div className="text-zinc-600 text-xs text-center py-10 italic">
+              <div className={cn(
+                "text-xs text-center py-10 italic",
+                isDarkMode ? "text-zinc-600" : "text-zinc-400"
+              )}>
                 No results.
               </div>
             )}
             {searchResults.map((result) => (
               <div 
                 key={result.bvid}
-                className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-sm border-b border-white/5 group/item"
+                className={cn(
+                  "px-4 py-3 flex items-center gap-3 transition-colors text-sm border-b group/item",
+                  isDarkMode 
+                    ? "hover:bg-white/5 border-white/5" 
+                    : "hover:bg-zinc-100 border-zinc-200"
+                )}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate text-xs text-zinc-200">
+                  <div className={cn(
+                    "font-medium truncate text-xs",
+                    isDarkMode ? "text-zinc-200" : "text-zinc-700"
+                  )}>
                     {result.title}
                   </div>
-                  <div className="text-[10px] text-zinc-500 truncate mt-0.5">{result.author}</div>
+                  <div className={cn(
+                    "text-[10px] truncate mt-0.5",
+                    isDarkMode ? "text-zinc-500" : "text-zinc-400"
+                  )}>{result.author}</div>
                 </div>
-                <div className="text-[10px] text-zinc-600 font-mono">{formatDuration(result.duration)}</div>
+                <div className={cn(
+                  "text-[10px] font-mono",
+                  isDarkMode ? "text-zinc-600" : "text-zinc-500"
+                )}>{formatDuration(result.duration)}</div>
                 <button
                   onClick={() => addFromSearch(result)}
                   className="text-zinc-500 hover:text-pink-400 transition-colors"
@@ -618,7 +693,10 @@ function App() {
         {viewMode === 'history' && (
           <div className="flex flex-col">
             {history.length === 0 && (
-              <div className="text-zinc-600 text-xs text-center py-10 italic">
+              <div className={cn(
+                "text-xs text-center py-10 italic",
+                isDarkMode ? "text-zinc-600" : "text-zinc-400"
+              )}>
                 No history yet.
               </div>
             )}
@@ -632,15 +710,29 @@ function App() {
                     setViewMode('playlist');
                   }
                 }}
-                className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer transition-colors text-sm border-b border-white/5"
+                className={cn(
+                  "px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors text-sm border-b",
+                  isDarkMode 
+                    ? "hover:bg-white/5 border-white/5" 
+                    : "hover:bg-zinc-100 border-zinc-200"
+                )}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate text-xs text-zinc-200">
+                  <div className={cn(
+                    "font-medium truncate text-xs",
+                    isDarkMode ? "text-zinc-200" : "text-zinc-700"
+                  )}>
                     {song.title}
                   </div>
-                  <div className="text-[10px] text-zinc-500 truncate mt-0.5">{song.author}</div>
+                  <div className={cn(
+                    "text-[10px] truncate mt-0.5",
+                    isDarkMode ? "text-zinc-500" : "text-zinc-400"
+                  )}>{song.author}</div>
                 </div>
-                <div className="text-[10px] text-zinc-600 font-mono">{formatDuration(song.duration)}</div>
+                <div className={cn(
+                  "text-[10px] font-mono",
+                  isDarkMode ? "text-zinc-600" : "text-zinc-500"
+                )}>{formatDuration(song.duration)}</div>
               </div>
             ))}
           </div>
@@ -648,10 +740,18 @@ function App() {
       </div>
 
       {/* Controls */}
-      <div className="h-24 bg-zinc-900 border-t border-white/5 flex flex-col">
+      <div className={cn(
+        "h-24 border-t flex flex-col",
+        isDarkMode 
+          ? "bg-zinc-900 border-white/5" 
+          : "bg-zinc-50 border-zinc-200"
+      )}>
         <div 
           ref={progressBarRef}
-          className="w-full h-1 bg-zinc-800 cursor-pointer group"
+          className={cn(
+            "w-full h-1 cursor-pointer group",
+            isDarkMode ? "bg-zinc-800" : "bg-zinc-200"
+          )}
           onClick={handleProgressClick}
         >
           <div 
@@ -666,7 +766,10 @@ function App() {
           <div className="flex items-center gap-3 w-1/3">
             {currentSong && (
               <>
-                <div className="w-12 h-12 rounded bg-zinc-800 overflow-hidden flex-shrink-0 shadow-md">
+                <div className={cn(
+                  "w-12 h-12 rounded overflow-hidden flex-shrink-0 shadow-md",
+                  isDarkMode ? "bg-zinc-800" : "bg-zinc-200"
+                )}>
                   <img 
                     src={currentSong.cover} 
                     alt="cover" 
@@ -674,35 +777,70 @@ function App() {
                   />
                 </div>
                 <div className="flex flex-col min-w-0 flex-1">
-                  <div className="text-[11px] font-medium text-white truncate">
+                  <div className={cn(
+                    "text-[11px] font-medium truncate",
+                    isDarkMode ? "text-white" : "text-zinc-900"
+                  )}>
                     {currentSong.title}
                   </div>
-                  <div className="text-[10px] text-zinc-500 truncate">
+                  <div className={cn(
+                    "text-[10px] truncate",
+                    isDarkMode ? "text-zinc-500" : "text-zinc-600"
+                  )}>
                     {currentSong.author}
                   </div>
-                  <div className="text-[9px] text-zinc-600 font-mono mt-0.5">
+                  <div className={cn(
+                    "text-[9px] font-mono mt-0.5",
+                    isDarkMode ? "text-zinc-600" : "text-zinc-500"
+                  )}>
                     {formatDuration(currentTime)} / {formatDuration(currentSong.duration)}
                   </div>
                 </div>
               </>
             )}
             {!currentSong && (
-              <span className="text-[10px] text-zinc-600 italic">No song playing</span>
+              <span className={cn(
+                "text-[10px] italic",
+                isDarkMode ? "text-zinc-600" : "text-zinc-400"
+              )}>No song playing</span>
             )}
           </div>
 
           <div className="flex items-center justify-center gap-4 w-1/3">
-            <button onClick={playPrev} className="text-zinc-400 hover:text-white transition-colors" disabled={playlist.length === 0}>
+            <button 
+              onClick={playPrev} 
+              className={cn(
+                "transition-colors",
+                isDarkMode 
+                  ? "text-zinc-400 hover:text-white" 
+                  : "text-zinc-600 hover:text-zinc-900"
+              )} 
+              disabled={playlist.length === 0}
+            >
               <SkipBack size={18} />
             </button>
             <button 
               onClick={togglePlay}
               disabled={!currentSong}
-              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+              className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-30 disabled:cursor-not-allowed",
+                isDarkMode 
+                  ? "bg-white text-black shadow-white/10" 
+                  : "bg-zinc-900 text-white shadow-zinc-900/20"
+              )}
             >
               {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
             </button>
-            <button onClick={playNext} className="text-zinc-400 hover:text-white transition-colors" disabled={playlist.length === 0}>
+            <button 
+              onClick={playNext} 
+              className={cn(
+                "transition-colors",
+                isDarkMode 
+                  ? "text-zinc-400 hover:text-white" 
+                  : "text-zinc-600 hover:text-zinc-900"
+              )} 
+              disabled={playlist.length === 0}
+            >
               <SkipForward size={18} />
             </button>
           </div>
@@ -710,14 +848,24 @@ function App() {
           <div className="flex items-center justify-end gap-3 w-1/3">
             <button 
               onClick={() => setIsShuffleOn(!isShuffleOn)}
-              className={cn("transition-colors hover:text-white", isShuffleOn ? "text-pink-500" : "text-zinc-400")}
+              className={cn(
+                "transition-colors",
+                isShuffleOn 
+                  ? "text-pink-500" 
+                  : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"
+              )}
               title={isShuffleOn ? "Shuffle: On" : "Shuffle: Off"}
             >
               <Shuffle size={16} />
             </button>
             <button 
               onClick={exportPlaylist}
-              className="text-zinc-400 hover:text-white transition-colors"
+              className={cn(
+                "transition-colors",
+                isDarkMode 
+                  ? "text-zinc-400 hover:text-white" 
+                  : "text-zinc-500 hover:text-zinc-900"
+              )}
               title="Export Playlist"
               disabled={playlist.length === 0}
             >
@@ -725,39 +873,66 @@ function App() {
             </button>
             <button 
               onClick={importPlaylist}
-              className="text-zinc-400 hover:text-white transition-colors"
+              className={cn(
+                "transition-colors",
+                isDarkMode 
+                  ? "text-zinc-400 hover:text-white" 
+                  : "text-zinc-500 hover:text-zinc-900"
+              )}
               title="Import Playlist"
             >
               <Upload size={14} />
             </button>
             <button 
               onClick={() => setViewMode(viewMode === 'playlist' ? 'playlist' : 'playlist')}
-              className={cn("transition-colors", viewMode === 'playlist' ? "text-pink-500" : "text-zinc-400 hover:text-white")}
+              className={cn(
+                "transition-colors",
+                viewMode === 'playlist' 
+                  ? "text-pink-500" 
+                  : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"
+              )}
             >
               <List size={16} />
             </button>
             <button 
               onClick={() => setViewMode(viewMode === 'history' ? 'playlist' : 'history')}
-              className={cn("transition-colors", viewMode === 'history' ? "text-pink-500" : "text-zinc-400 hover:text-white")}
+              className={cn(
+                "transition-colors",
+                viewMode === 'history' 
+                  ? "text-pink-500" 
+                  : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"
+              )}
               title="History"
             >
               <Clock size={16} />
             </button>
             <button 
               onClick={toggleLoopMode}
-              className={cn("transition-colors hover:text-white", loopColor)}
+              className={cn("transition-colors", loopColor, isDarkMode ? "hover:text-white" : "hover:text-zinc-900")}
               title={loopMode === 'off' ? 'Loop: Off' : loopMode === 'all' ? 'Loop: All' : 'Loop: One'}
             >
               <LoopIcon size={16} />
             </button>
             <div className="flex items-center gap-1.5 group w-16">
-              <Volume2 size={14} className="text-zinc-400 flex-shrink-0" />
+              <Volume2 
+                size={14} 
+                className={cn(
+                  "flex-shrink-0",
+                  isDarkMode ? "text-zinc-400" : "text-zinc-500"
+                )} 
+              />
               <input 
                 type="range" 
                 min="0" max="1" step="0.05"
                 value={volume}
                 onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
+                className={cn(
+                  "w-full h-1 rounded-lg appearance-none cursor-pointer",
+                  "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full",
+                  isDarkMode 
+                    ? "bg-zinc-700 [&::-webkit-slider-thumb]:bg-white" 
+                    : "bg-zinc-300 [&::-webkit-slider-thumb]:bg-zinc-900"
+                )}
               />
             </div>
           </div>
