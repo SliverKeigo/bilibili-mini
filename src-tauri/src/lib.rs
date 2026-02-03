@@ -3,7 +3,7 @@ use tauri::{
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager, Emitter,
 };
-use tauri_plugin_positioner::{Position, WindowExt};
+// use tauri_plugin_positioner::{Position, WindowExt}; // Disable plugin positioning
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -59,14 +59,25 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            // Temporarily disable auto-positioning to fix crash
-                            // let _ = window.as_ref().window().move_window(Position::TopRight);
-                            
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
+                            // Manual positioning logic
+                            if !window.is_visible().unwrap_or(false) {
+                                // Calculate position: Top Right
+                                if let Some(monitor) = window.current_monitor().unwrap() {
+                                    let screen_size = monitor.size();
+                                    let window_size = window.outer_size().unwrap();
+                                    
+                                    // Position at top right with some padding
+                                    // Mac menu bar is usually ~30px
+                                    let x = screen_size.width as i32 - window_size.width as i32 - 20;
+                                    let y = 40; 
+                                    
+                                    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                                }
+                                
                                 let _ = window.show();
                                 let _ = window.set_focus();
+                            } else {
+                                let _ = window.hide();
                             }
                         }
                     }
