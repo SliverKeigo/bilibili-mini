@@ -221,14 +221,21 @@ function App() {
     
     const trimmed = inputBv.trim();
     
-    // Check if input contains a BV ID (even in a URL)
+    // 1. Try to extract BV ID (supports raw ID or URL)
     const bvMatch = trimmed.match(/(BV\w{10})/i);
     if (bvMatch) {
       await handleAddByBV(bvMatch[1]);
-    } else {
-      // Trigger search
-      await handleSearch(trimmed);
+      return;
     }
+
+    // 2. If it looks like a URL but no BV ID found, show error
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      setErrorMsg('Invalid Bilibili link (No BV ID found)');
+      return;
+    }
+
+    // 3. Otherwise, treat as search keyword
+    await handleSearch(trimmed);
   };
 
   const handleAddByBV = async (bvid: string) => {
@@ -588,9 +595,41 @@ function App() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide">
+      <div className="flex-1 overflow-y-auto scrollbar-hide relative">
         {viewMode === 'playlist' && (
-          <div className="flex flex-col">
+          <div className="flex flex-col pb-2">
+            {/* Playlist Header Controls */}
+            <div className="px-4 py-2 flex items-center justify-between text-xs border-b border-white/5">
+               <div className="flex items-center gap-2">
+                  <span className={cn(isDarkMode ? "text-zinc-500" : "text-zinc-400")}>
+                    {playlist.length} songs
+                  </span>
+               </div>
+               <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setIsShuffleOn(!isShuffleOn)}
+                    className={cn("transition-colors", isShuffleOn ? "text-pink-500" : "text-zinc-500 hover:text-zinc-700")}
+                    title="Shuffle"
+                  >
+                    <Shuffle size={14} />
+                  </button>
+                  <button 
+                    onClick={toggleLoopMode}
+                    className={cn("transition-colors", loopColor, "hover:text-zinc-700")}
+                    title="Loop Mode"
+                  >
+                    <LoopIcon size={14} />
+                  </button>
+                  <div className="w-px h-3 bg-zinc-700/20 mx-1" />
+                  <button onClick={exportPlaylist} className="text-zinc-500 hover:text-zinc-700" title="Export">
+                    <Download size={14} />
+                  </button>
+                  <button onClick={importPlaylist} className="text-zinc-500 hover:text-zinc-700" title="Import">
+                    <Upload size={14} />
+                  </button>
+               </div>
+            </div>
+
             {playlist.length === 0 && (
               <div className={cn(
                 "text-xs text-center py-10 italic",
@@ -845,96 +884,42 @@ function App() {
             </button>
           </div>
 
-          <div className="flex items-center justify-end gap-3 w-1/3">
+          <div className="flex items-center justify-end gap-2 w-1/3 min-w-[100px]">
+            <div className="flex items-center gap-1.5 group/vol relative">
+               {/* Volume Slider - Popover on hover */}
+               <div className="absolute bottom-full right-0 mb-2 w-6 h-24 bg-zinc-800 rounded-lg shadow-xl flex items-center justify-center hidden group-hover/vol:flex border border-white/10 p-2">
+                 <input 
+                    type="range" 
+                    min="0" max="1" step="0.05"
+                    value={volume}
+                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                    className="w-1 h-20 -rotate-90 appearance-none bg-zinc-600 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                  />
+               </div>
+              <Volume2 
+                size={16} 
+                className={cn(
+                  "cursor-pointer hover:text-pink-500 transition-colors",
+                  isDarkMode ? "text-zinc-400" : "text-zinc-500"
+                )} 
+              />
+            </div>
+            
             <button 
-              onClick={() => setIsShuffleOn(!isShuffleOn)}
+              onClick={() => {
+                if (viewMode === 'playlist') setViewMode('history');
+                else setViewMode('playlist');
+              }}
               className={cn(
-                "transition-colors",
-                isShuffleOn 
-                  ? "text-pink-500" 
-                  : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"
-              )}
-              title={isShuffleOn ? "Shuffle: On" : "Shuffle: Off"}
-            >
-              <Shuffle size={16} />
-            </button>
-            <button 
-              onClick={exportPlaylist}
-              className={cn(
-                "transition-colors",
-                isDarkMode 
-                  ? "text-zinc-400 hover:text-white" 
-                  : "text-zinc-500 hover:text-zinc-900"
-              )}
-              title="Export Playlist"
-              disabled={playlist.length === 0}
-            >
-              <Download size={14} />
-            </button>
-            <button 
-              onClick={importPlaylist}
-              className={cn(
-                "transition-colors",
-                isDarkMode 
-                  ? "text-zinc-400 hover:text-white" 
-                  : "text-zinc-500 hover:text-zinc-900"
-              )}
-              title="Import Playlist"
-            >
-              <Upload size={14} />
-            </button>
-            <button 
-              onClick={() => setViewMode(viewMode === 'playlist' ? 'playlist' : 'playlist')}
-              className={cn(
-                "transition-colors",
-                viewMode === 'playlist' 
-                  ? "text-pink-500" 
-                  : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"
-              )}
-            >
-              <List size={16} />
-            </button>
-            <button 
-              onClick={() => setViewMode(viewMode === 'history' ? 'playlist' : 'history')}
-              className={cn(
-                "transition-colors",
+                "transition-colors ml-2",
                 viewMode === 'history' 
                   ? "text-pink-500" 
                   : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"
               )}
-              title="History"
+              title={viewMode === 'playlist' ? "View History" : "View Playlist"}
             >
-              <Clock size={16} />
+              {viewMode === 'playlist' ? <Clock size={16} /> : <List size={16} />}
             </button>
-            <button 
-              onClick={toggleLoopMode}
-              className={cn("transition-colors", loopColor, isDarkMode ? "hover:text-white" : "hover:text-zinc-900")}
-              title={loopMode === 'off' ? 'Loop: Off' : loopMode === 'all' ? 'Loop: All' : 'Loop: One'}
-            >
-              <LoopIcon size={16} />
-            </button>
-            <div className="flex items-center gap-1.5 group w-16">
-              <Volume2 
-                size={14} 
-                className={cn(
-                  "flex-shrink-0",
-                  isDarkMode ? "text-zinc-400" : "text-zinc-500"
-                )} 
-              />
-              <input 
-                type="range" 
-                min="0" max="1" step="0.05"
-                value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className={cn(
-                  "w-full h-1 rounded-lg appearance-none cursor-pointer",
-                  "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:rounded-full",
-                  isDarkMode 
-                    ? "bg-zinc-700 [&::-webkit-slider-thumb]:bg-white" 
-                    : "bg-zinc-300 [&::-webkit-slider-thumb]:bg-zinc-900"
-                )}
-              />
-            </div>
           </div>
         </div>
       </div>
