@@ -221,9 +221,12 @@ function App() {
     
     const trimmed = inputBv.trim();
     
-    // 1. Try to extract BV ID (supports raw ID or URL)
-    const bvMatch = trimmed.match(/(BV\w{10})/i);
+    // 1. Try to extract BV ID (supports raw ID or URL, lenient matching)
+    // Matches "BV" followed by 10 alphanumeric chars
+    const bvMatch = trimmed.match(/(BV[a-zA-Z0-9]{10})/i);
+    
     if (bvMatch) {
+      console.log('Extracted BV:', bvMatch[1]);
       await handleAddByBV(bvMatch[1]);
       return;
     }
