@@ -5,6 +5,74 @@ use tauri::{
 };
 // use tauri_plugin_positioner::{Position, WindowExt}; // Disable plugin positioning
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+use reqwest::header::{HEADER_MAP, USER_AGENT, REFERER};
+
+const BILI_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+#[tauri::command]
+async fn fetch_bili_video_info(bvid: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://api.bilibili.com/x/web-interface/view?bvid={}", bvid);
+    
+    let res = client.get(&url)
+        .header(USER_AGENT, BILI_USER_AGENT)
+        .header(REFERER, format!("https://www.bilibili.com/video/{}", bvid))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    Ok(json)
+}
+
+#[tauri::command]
+async fn fetch_bili_play_url(bvid: String, cid: u64) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    // qn=16 (64k), fnval=16 (dash)
+    let url = format!("https://api.bilibili.com/x/player/playurl?bvid={}&cid={}&qn=16&fnval=16&fnver=0", bvid, cid);
+    
+    let res = client.get(&url)
+        .header(USER_AGENT, BILI_USER_AGENT)
+        .header(REFERER, "https://www.bilibili.com")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    Ok(json)
+}
+
+#[tauri::command]
+async fn fetch_bili_search(keyword: String, page: u64) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={}&page={}", urlencoding::encode(&keyword), page);
+    
+    let res = client.get(&url)
+        .header(USER_AGENT, BILI_USER_AGENT)
+        .header(REFERER, "https://www.bilibili.com")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    Ok(json)
+}
+
+// Proxy the audio stream content to bypass Referer check in frontend
+#[tauri::command]
+async fn fetch_audio_stream(url: String) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::new();
+    
+    let res = client.get(&url)
+        .header(USER_AGENT, BILI_USER_AGENT)
+        .header(REFERER, "https://www.bilibili.com")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
+    Ok(bytes.to_vec())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,6 +81,12 @@ pub fn run() {
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            fetch_bili_video_info,
+            fetch_bili_play_url,
+            fetch_bili_search,
+            fetch_audio_stream
+        ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Focused(focused) = event {
                 if !focused {

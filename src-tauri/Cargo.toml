@@ -26,4 +26,6 @@ tauri-plugin-positioner = { version = "2.3.1", features = ["tray-icon"] }
 tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-global-shortcut = "2.3.1"
 souvlaki = "0.8.3"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+urlencoding = "2"
 

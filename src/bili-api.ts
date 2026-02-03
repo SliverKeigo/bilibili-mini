@@ -1,4 +1,4 @@
-import { fetch } from '@tauri-apps/plugin-http';
+import { invoke } from '@tauri-apps/api/core';
 
 // Types
 export interface BiliVideoInfo {
@@ -30,13 +30,6 @@ export interface BiliSearchResult {
   pic: string;
 }
 
-export interface BiliAudioStream {
-  url: string; // The direct stream URL
-  type: string;
-}
-
-const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
 // Helper: Convert seconds to mm:ss
 export const formatDuration = (seconds: number) => {
   const min = Math.floor(seconds / 60);
@@ -55,21 +48,12 @@ const parseDuration = (str: string): number => {
   return 0;
 };
 
-// 1. Get video metadata (including CID and pages)
+// 1. Get video metadata (including CID and pages) - via Rust
 export async function getVideoInfo(bvid: string): Promise<BiliVideoInfo> {
-  const url = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
-  console.log('Fetching video info:', url);
+  console.log('Invoking fetch_bili_video_info:', bvid);
   
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Referer': 'https://www.bilibili.com/video/' + bvid,
-    },
-    referrer: 'https://www.bilibili.com/video/' + bvid, // Add standard fetch referrer option
-  });
+  const data: any = await invoke('fetch_bili_video_info', { bvid });
   
-  const data = await response.json();
   if (data.code !== 0) {
     throw new Error(data.message || 'Failed to fetch video info');
   }
@@ -77,21 +61,12 @@ export async function getVideoInfo(bvid: string): Promise<BiliVideoInfo> {
   return data.data;
 }
 
-// 2. Get audio stream URL
+// 2. Get audio stream URL - via Rust
 export async function getAudioStreamUrl(bvid: string, cid: number): Promise<string> {
-  // qn=16 (64k), fnval=16 (dash)
-  const url = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=16&fnval=16&fnver=0`;
-  console.log('Fetching playurl:', url);
+  console.log('Invoking fetch_bili_play_url:', { bvid, cid });
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Referer': 'https://www.bilibili.com', // Crucial!
-    }
-  });
+  const data: any = await invoke('fetch_bili_play_url', { bvid, cid });
 
-  const data = await response.json();
   if (data.code !== 0) {
     throw new Error(data.message || 'Failed to fetch play url');
   }
@@ -111,41 +86,24 @@ export async function getAudioStreamUrl(bvid: string, cid: number): Promise<stri
   throw new Error('No audio stream found');
 }
 
-// 3. Proxy audio stream (to bypass Referer check on playback)
+// 3. Proxy audio stream (to bypass Referer check on playback) - via Rust
 export async function getPlayableAudioUrl(streamUrl: string): Promise<string> {
-  console.log('Proxying stream:', streamUrl);
+  console.log('Invoking fetch_audio_stream:', streamUrl);
   
-  const response = await fetch(streamUrl, {
-    method: 'GET',
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Referer': 'https://www.bilibili.com', // The magic key
-    }
-  });
+  // Returns Vec<u8> which maps to number[] in JS
+  const bytes = await invoke<number[]>('fetch_audio_stream', { url: streamUrl });
   
-  if (!response.ok) {
-    throw new Error(`Stream fetch failed: ${response.status}`);
-  }
-
-  const blob = await response.blob();
+  // Convert to Blob
+  const blob = new Blob([new Uint8Array(bytes)], { type: 'audio/mp4' }); // or audio/m4a
   return URL.createObjectURL(blob);
 }
 
-// 4. Search videos on Bilibili
+// 4. Search videos on Bilibili - via Rust
 export async function searchVideos(keyword: string, page = 1): Promise<BiliSearchResult[]> {
-  const url = `https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=${encodeURIComponent(keyword)}&page=${page}`;
-  console.log('Searching:', url);
+  console.log('Invoking fetch_bili_search:', { keyword, page });
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Referer': 'https://www.bilibili.com', 
-    },
-    referrer: 'https://www.bilibili.com',
-  });
+  const data: any = await invoke('fetch_bili_search', { keyword, page });
 
-  const data = await response.json();
   if (data.code !== 0) {
     throw new Error(data.message || 'Search failed');
   }
