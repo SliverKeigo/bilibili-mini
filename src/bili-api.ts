@@ -64,8 +64,9 @@ export async function getVideoInfo(bvid: string): Promise<BiliVideoInfo> {
     method: 'GET',
     headers: {
       'User-Agent': USER_AGENT,
-      'Referer': 'https://www.bilibili.com/video/' + bvid, // Add Referer to bypass 403
-    }
+      'Referer': 'https://www.bilibili.com/video/' + bvid,
+    },
+    referrer: 'https://www.bilibili.com/video/' + bvid, // Add standard fetch referrer option
   });
   
   const data = await response.json();
@@ -139,8 +140,9 @@ export async function searchVideos(keyword: string, page = 1): Promise<BiliSearc
     method: 'GET',
     headers: {
       'User-Agent': USER_AGENT,
-      'Referer': 'https://www.bilibili.com', // Also add referer for search
-    }
+      'Referer': 'https://www.bilibili.com', 
+    },
+    referrer: 'https://www.bilibili.com',
   });
 
   const data = await response.json();
