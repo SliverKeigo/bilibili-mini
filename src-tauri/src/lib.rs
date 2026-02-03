@@ -59,7 +59,8 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.as_ref().window().move_window(Position::TrayCenter);
+                            // Temporarily disable auto-positioning to fix crash
+                            // let _ = window.as_ref().window().move_window(Position::TopRight);
                             
                             if window.is_visible().unwrap_or(false) {
                                 let _ = window.hide();
