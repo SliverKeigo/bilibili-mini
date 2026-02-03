@@ -75,8 +75,11 @@ pub fn run() {
                                     let screen_size = monitor.size();
                                     let window_size = window.outer_size().unwrap();
                                     
-                                    let x = screen_size.width as i32 - window_size.width as i32 - 20;
-                                    let y = 40; 
+                                    // Position at top right, but offset more to the left to avoid being too close to the edge
+                                    // Assuming tray icon is somewhere near the right, but maybe not the absolute edge
+                                    // 200px padding from right edge should place it under the clock/tray area roughly
+                                    let x = screen_size.width as i32 - window_size.width as i32 - 120;
+                                    let y = 32; // Just below menu bar (approx 22-30px)
                                     
                                     let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
                                 }

@@ -221,8 +221,8 @@ function App() {
     
     const trimmed = inputBv.trim();
     
-    // Check if it's a BV ID
-    const bvMatch = trimmed.match(/(BV\w+)/);
+    // Check if input contains a BV ID (even in a URL)
+    const bvMatch = trimmed.match(/(BV\w{10})/i);
     if (bvMatch) {
       await handleAddByBV(bvMatch[1]);
     } else {
