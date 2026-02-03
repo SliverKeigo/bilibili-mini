@@ -87,13 +87,14 @@ pub fn run() {
             fetch_bili_search,
             fetch_audio_stream
         ])
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(focused) = event {
-                if !focused {
-                    let _ = window.hide();
-                }
-            }
-        })
+        // Temporarily disable auto-hide to prevent window from becoming inaccessible
+        // .on_window_event(|window, event| {
+        //     if let tauri::WindowEvent::Focused(focused) = event {
+        //         if !focused {
+        //             let _ = window.hide();
+        //         }
+        //     }
+        // })
         .setup(|app| {
             // Register global shortcuts
             let app_handle = app.handle().clone();
