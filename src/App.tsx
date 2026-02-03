@@ -37,11 +37,23 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playlist, setPlaylist] = useState<Song[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const parsed = saved ? JSON.parse(saved) : [];
+      // Filter out invalid entries
+      return Array.isArray(parsed) ? parsed.filter(s => s && s.id) : [];
+    } catch {
+      return [];
+    }
   });
   const [history, setHistory] = useState<Song[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const parsed = saved ? JSON.parse(saved) : [];
+      // Filter out invalid entries
+      return Array.isArray(parsed) ? parsed.filter(s => s && s.id) : [];
+    } catch {
+      return [];
+    }
   });
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(-1);
   const [progress, setProgress] = useState(0); 
@@ -193,8 +205,9 @@ function App() {
   const currentSong = currentSongIndex >= 0 ? playlist[currentSongIndex] : null;
 
   const addToHistory = (song: Song) => {
+    if (!song || !song.id) return; // Safety check
     setHistory(prev => {
-      const filtered = prev.filter(s => s.id !== song.id);
+      const filtered = prev.filter(s => s && s.id !== song.id);
       return [song, ...filtered].slice(0, 50); // Keep last 50
     });
   };
