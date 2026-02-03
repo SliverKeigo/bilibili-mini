@@ -133,30 +133,20 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            // Simple toggle logic
-                            let is_visible = window.is_visible().unwrap_or(false);
-                            
-                            if !is_visible {
-                                // Calculate position: Top Right
-                                if let Some(monitor) = window.current_monitor().unwrap() {
-                                    let screen_size = monitor.size();
-                                    let window_size = window.outer_size().unwrap();
-                                    
-                                    // Position at top right, but offset more to the left to avoid being too close to the edge
-                                    // Assuming tray icon is somewhere near the right, but maybe not the absolute edge
-                                    // 200px padding from right edge should place it under the clock/tray area roughly
-                                    let x = screen_size.width as i32 - window_size.width as i32 - 120;
-                                    let y = 32; // Just below menu bar (approx 22-30px)
-                                    
-                                    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
-                                }
+                            // FORCE RESET: Always move to position and show, regardless of current state
+                            if let Some(monitor) = window.current_monitor().unwrap() {
+                                let screen_size = monitor.size();
+                                let window_size = window.outer_size().unwrap();
                                 
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            } else {
-                                // If already visible, just focus it
-                                let _ = window.set_focus();
+                                let x = screen_size.width as i32 - window_size.width as i32 - 120;
+                                let y = 32;
+                                
+                                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
                             }
+                            
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.set_always_on_top(true);
                         }
                     }
                     _ => {}
