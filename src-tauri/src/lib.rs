@@ -5,7 +5,7 @@ use tauri::{
 };
 // use tauri_plugin_positioner::{Position, WindowExt}; // Disable plugin positioning
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-use reqwest::header::{HEADER_MAP, USER_AGENT, REFERER};
+use reqwest::header::{USER_AGENT, REFERER};
 
 const BILI_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
