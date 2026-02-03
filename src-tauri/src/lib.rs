@@ -59,15 +59,16 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            // Manual positioning logic
-                            if !window.is_visible().unwrap_or(false) {
+                            // Simple toggle logic with logging
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            println!("Tray click. Visible: {}", is_visible);
+
+                            if !is_visible {
                                 // Calculate position: Top Right
                                 if let Some(monitor) = window.current_monitor().unwrap() {
                                     let screen_size = monitor.size();
                                     let window_size = window.outer_size().unwrap();
                                     
-                                    // Position at top right with some padding
-                                    // Mac menu bar is usually ~30px
                                     let x = screen_size.width as i32 - window_size.width as i32 - 20;
                                     let y = 40; 
                                     
@@ -77,7 +78,9 @@ pub fn run() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             } else {
-                                let _ = window.hide();
+                                // Temporarily comment out hide to see if it fixes the "flash and disappear"
+                                // let _ = window.hide();
+                                let _ = window.set_focus(); // Just refocus if already visible
                             }
                         }
                     }
