@@ -13,6 +13,13 @@ pub fn run() {
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(focused) = event {
+                if !focused {
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             // Register global shortcuts
             let app_handle = app.handle().clone();
@@ -59,10 +66,9 @@ pub fn run() {
                     } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            // Simple toggle logic with logging
+                            // Simple toggle logic
                             let is_visible = window.is_visible().unwrap_or(false);
-                            println!("Tray click. Visible: {}", is_visible);
-
+                            
                             if !is_visible {
                                 // Calculate position: Top Right
                                 if let Some(monitor) = window.current_monitor().unwrap() {
@@ -78,9 +84,8 @@ pub fn run() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             } else {
-                                // Temporarily comment out hide to see if it fixes the "flash and disappear"
-                                // let _ = window.hide();
-                                let _ = window.set_focus(); // Just refocus if already visible
+                                // If already visible, just focus it
+                                let _ = window.set_focus();
                             }
                         }
                     }
