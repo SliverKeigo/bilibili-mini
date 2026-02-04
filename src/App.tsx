@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Search, Volume2, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2, Shuffle, Moon, Sun } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Search, List, Repeat, Repeat1, RefreshCw, X, ArrowLeft, Plus, Clock, Download, Upload, Trash2, Shuffle, Moon, Sun } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult } from './bili-api';
+import { getVideoInfo, getAudioStreamUrl, getPlayableAudioUrl, formatDuration, searchVideos, BiliSearchResult, getProxiedImageUrl } from './bili-api';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -32,6 +33,39 @@ const STORAGE_KEYS = {
   SHUFFLE: 'bilimini_shuffle',
   THEME: 'bilimini_theme',
 };
+
+// Cover image component with proxy loading
+function CoverImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [proxiedSrc, setProxiedSrc] = useState<string>(src);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    
+    const loadImage = async () => {
+      try {
+        const url = await getProxiedImageUrl(src);
+        if (!cancelled) {
+          setProxiedSrc(url);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setError(true);
+        }
+      }
+    };
+
+    loadImage();
+    return () => { cancelled = true; };
+  }, [src]);
+
+  if (error) {
+    return <div className={cn(className, "flex items-center justify-center text-zinc-500")}>📺</div>;
+  }
+
+  return <img src={proxiedSrc} alt={alt} className={className} />;
+}
 
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -201,6 +235,19 @@ function App() {
       unlisten.then(fn => fn());
     };
   }, [isPlaying, currentSongIndex, playlist]);
+
+  // Hide window on focus lost (click outside)
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (!focused) {
+        getCurrentWindow().hide();
+      }
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
 
   const currentSong = currentSongIndex >= 0 ? playlist[currentSongIndex] : null;
 
@@ -825,7 +872,7 @@ function App() {
                   "w-12 h-12 rounded overflow-hidden flex-shrink-0 shadow-md",
                   isDarkMode ? "bg-zinc-800" : "bg-zinc-200"
                 )}>
-                  <img 
+                  <CoverImage 
                     src={currentSong.cover} 
                     alt="cover" 
                     className="w-full h-full object-cover"
@@ -901,33 +948,13 @@ function App() {
           </div>
 
           <div className="flex items-center justify-end gap-2 w-1/3 min-w-[100px]">
-            <div className="flex items-center gap-1.5 group/vol relative">
-               {/* Volume Slider - Popover on hover */}
-               <div className="absolute bottom-full right-0 mb-2 w-6 h-24 bg-zinc-800 rounded-lg shadow-xl flex items-center justify-center hidden group-hover/vol:flex border border-white/10 p-2">
-                 <input 
-                    type="range" 
-                    min="0" max="1" step="0.05"
-                    value={volume}
-                    onChange={(e) => setVolume(parseFloat(e.target.value))}
-                    className="w-1 h-20 -rotate-90 appearance-none bg-zinc-600 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-                  />
-               </div>
-              <Volume2 
-                size={16} 
-                className={cn(
-                  "cursor-pointer hover:text-pink-500 transition-colors",
-                  isDarkMode ? "text-zinc-400" : "text-zinc-500"
-                )} 
-              />
-            </div>
-            
             <button 
               onClick={() => {
                 if (viewMode === 'playlist') setViewMode('history');
                 else setViewMode('playlist');
               }}
               className={cn(
-                "transition-colors ml-2",
+                "transition-colors",
                 viewMode === 'history' 
                   ? "text-pink-500" 
                   : isDarkMode ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-900"

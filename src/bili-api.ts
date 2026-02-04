@@ -30,6 +30,9 @@ export interface BiliSearchResult {
   pic: string;
 }
 
+// Cache for proxied image URLs
+const imageCache = new Map<string, string>();
+
 // Helper: Convert seconds to mm:ss
 export const formatDuration = (seconds: number) => {
   const min = Math.floor(seconds / 60);
@@ -47,6 +50,25 @@ const parseDuration = (str: string): number => {
   }
   return 0;
 };
+
+// Helper: Get proxied image URL (bypass Bilibili Referer check)
+export async function getProxiedImageUrl(imageUrl: string): Promise<string> {
+  // Return cached URL if available
+  if (imageCache.has(imageUrl)) {
+    return imageCache.get(imageUrl)!;
+  }
+
+  try {
+    const bytes = await invoke<number[]>('fetch_image', { url: imageUrl });
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' });
+    const blobUrl = URL.createObjectURL(blob);
+    imageCache.set(imageUrl, blobUrl);
+    return blobUrl;
+  } catch (e) {
+    console.error('Failed to proxy image:', e);
+    return imageUrl; // Fallback to original URL
+  }
+}
 
 // 1. Get video metadata (including CID and pages) - via Rust
 export async function getVideoInfo(bvid: string): Promise<BiliVideoInfo> {

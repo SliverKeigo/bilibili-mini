@@ -7,6 +7,7 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "http:default",
     "opener:default",
     {
@@ -14,6 +15,15 @@
       "allow": [
         {
           "url": "https://api.bilibili.com/*"
+        },
+        {
+          "url": "https://i0.hdslb.com/*"
+        },
+        {
+          "url": "https://i1.hdslb.com/*"
+        },
+        {
+          "url": "https://i2.hdslb.com/*"
         }
       ]
     }

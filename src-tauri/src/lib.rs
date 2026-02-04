@@ -74,6 +74,22 @@ async fn fetch_audio_stream(url: String) -> Result<Vec<u8>, String> {
     Ok(bytes.to_vec())
 }
 
+// Proxy image to bypass Referer check
+#[tauri::command]
+async fn fetch_image(url: String) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::new();
+    
+    let res = client.get(&url)
+        .header(USER_AGENT, BILI_USER_AGENT)
+        .header(REFERER, "https://www.bilibili.com")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
+    Ok(bytes.to_vec())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -85,7 +101,8 @@ pub fn run() {
             fetch_bili_video_info,
             fetch_bili_play_url,
             fetch_bili_search,
-            fetch_audio_stream
+            fetch_audio_stream,
+            fetch_image
         ])
         .setup(|app| {
             // Register global shortcuts
